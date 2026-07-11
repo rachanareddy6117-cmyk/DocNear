@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Find Doctors — DocNear</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html" class="brand"><span class="dot"></span> DocNear</a>
+  <nav>
+    <a href="index.html">Home</a>
+    <a href="find-doctors.html">Find Doctors</a>
+  </nav>
+  <div class="nav-actions" id="navUserSlot"></div>
+</div>
+
+<section class="section" style="padding-top:40px;">
+  <div class="container">
+    <div class="section-head" style="margin-bottom:30px;">
+      <div class="eyebrow">Find care</div>
+      <h2>Search doctors near you</h2>
+      <p>Filter by specialization or city, or let us find the doctors closest to your location.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:26px;">
+      <div class="grid grid-3" style="align-items:end;">
+        <div class="field mb-0">
+          <label>Specialization</label>
+          <input type="text" id="specInput" placeholder="e.g. Cardiologist">
+        </div>
+        <div class="field mb-0">
+          <label>City</label>
+          <input type="text" id="cityInput" placeholder="e.g. Hyderabad">
+        </div>
+        <div class="flex gap-12">
+          <button class="btn btn-primary btn-block" id="searchBtn">Search</button>
+          <button class="btn btn-outline btn-block" id="nearMeBtn">📍 Near me</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="resultsMsg" class="text-small muted mt-8"></div>
+    <div class="grid grid-2 mt-16" id="doctorResults"></div>
+  </div>
+</section>
+
+<!-- Booking modal (simple inline panel) -->
+<div id="bookModalOverlay" class="hidden" style="position:fixed; inset:0; background:rgba(13,59,58,0.45); z-index:100; display:flex; align-items:center; justify-content:center; padding:20px;">
+  <div class="card" style="max-width:440px; width:100%; background:white;">
+    <h3 id="bookModalDocName">Book appointment</h3>
+    <div class="form-msg" id="bookMsg"></div>
+    <form id="bookForm">
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="bookDate" required>
+      </div>
+      <div class="field">
+        <label>Time slot</label>
+        <input type="text" id="bookSlot" placeholder="e.g. 10:00-10:30" required>
+      </div>
+      <div class="field">
+        <label>Mode</label>
+        <select id="bookMode">
+          <option value="video">Video call</option>
+          <option value="in-person">In person</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Reason for visit</label>
+        <textarea id="bookReason" rows="2" placeholder="Briefly describe your symptoms"></textarea>
+      </div>
+      <div class="flex gap-12 mt-8">
+        <button type="button" class="btn btn-ghost btn-block" id="cancelBookBtn">Cancel</button>
+        <button type="submit" class="btn btn-coral btn-block">Confirm booking</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<footer>© 2026 DocNear.</footer>
+
+<script src="js/api.js"></script>
+<script src="js/auth-guard.js"></script>
+<script>
+  const resultsEl = document.getElementById("doctorResults");
+  const resultsMsg = document.getElementById("resultsMsg");
+  let selectedDoctorId = null;
+
+  function renderDoctors(doctors, withDistance = false) {
+    resultsEl.innerHTML = "";
+    if (!doctors.length) {
+      resultsMsg.textContent = "No doctors found. Try a different search.";
+      return;
+    }
+    resultsMsg.textContent = `${doctors.length} doctor(s) found`;
+
+    doctors.forEach((entry) => {
+      const doc = withDistance ? entry.doctor : entry;
+      const distance = withDistance ? `${entry.distanceKm.toFixed(1)} km away` : null;
+      const card = document.createElement("div");
+      card.className = "card doctor-card";
+      card.innerHTML = `
+        <div class="avatar">${initials(doc.user?.name)}</div>
+        <div class="doc-body">
+          <div class="meta-title">${doc.user?.name || "Doctor"}</div>
+          <div class="meta-sub">${doc.specialization || "General Physician"} · ${doc.experienceYears || 0} yrs experience</div>
+          <div class="mt-8">
+            <span class="tag">${doc.city || "City not set"}</span>
+            ${distance ? `<span class="tag">${distance}</span>` : ""}
+            <span class="tag">₹${doc.consultationFee || 0} fee</span>
+          </div>
+          <div class="doc-actions">
+            <button class="btn btn-primary btn-sm" onclick="openBookModal('${doc._id}', '${(doc.user?.name || "Doctor").replace(/'/g, "")}')">Book appointment</button>
+          </div>
+        </div>
+      `;
+      resultsEl.appendChild(card);
+    });
+  }
+
+  async function loadAll() {
+    resultsMsg.textContent = "Loading doctors...";
+    try {
+      const doctors = await Api.listDoctors();
+      renderDoctors(doctors);
+    } catch (err) {
+      resultsMsg.textContent = err.message;
+    }
+  }
+
+  document.getElementById("searchBtn").addEventListener("click", async () => {
+    resultsMsg.textContent = "Searching...";
+    try {
+      const specialization = document.getElementById("specInput").value.trim();
+      const city = document.getElementById("cityInput").value.trim();
+      const doctors = await Api.listDoctors({ specialization, city });
+      renderDoctors(doctors);
+    } catch (err) {
+      resultsMsg.textContent = err.message;
+    }
+  });
+
+  document.getElementById("nearMeBtn").addEventListener("click", () => {
+    if (!navigator.geolocation) {
+      resultsMsg.textContent = "Geolocation is not supported by your browser.";
+      return;
+    }
+    resultsMsg.textContent = "Locating you...";
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const results = await Api.nearestDoctors(pos.coords.latitude, pos.coords.longitude);
+          renderDoctors(results, true);
+        } catch (err) {
+          resultsMsg.textContent = err.message;
+        }
+      },
+      () => { resultsMsg.textContent = "Could not access your location. Please allow location access and try again."; }
+    );
+  });
+
+  // ---- Booking modal ----
+  const overlay = document.getElementById("bookModalOverlay");
+  const bookForm = document.getElementById("bookForm");
+  const bookMsg = document.getElementById("bookMsg");
+
+  function openBookModal(doctorId, doctorName) {
+    if (!requireAuth("patient")) {
+      window.location.href = "login.html";
+      return;
+    }
+    selectedDoctorId = doctorId;
+    document.getElementById("bookModalDocName").textContent = `Book with ${doctorName}`;
+    bookMsg.className = "form-msg";
+    bookForm.reset();
+    overlay.classList.remove("hidden");
+  }
+
+  document.getElementById("cancelBookBtn").addEventListener("click", () => overlay.classList.add("hidden"));
+
+  bookForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await Api.bookAppointment({
+        doctor: selectedDoctorId,
+        date: document.getElementById("bookDate").value,
+        timeSlot: document.getElementById("bookSlot").value,
+        mode: document.getElementById("bookMode").value,
+        reason: document.getElementById("bookReason").value,
+      });
+      overlay.classList.add("hidden");
+      window.location.href = "appointments.html";
+    } catch (err) {
+      bookMsg.textContent = err.message;
+      bookMsg.className = "form-msg error";
+    }
+  });
+
+  loadAll();
+</script>
+</body>
+</html>

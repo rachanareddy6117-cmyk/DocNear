@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Appointments — DocNear</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html" class="brand"><span class="dot"></span> DocNear</a>
+  <nav></nav>
+  <div class="nav-actions" id="navUserSlot"></div>
+</div>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <a href="patient-dashboard.html">🏠 Overview</a>
+    <a href="find-doctors.html">🔎 Find Doctors</a>
+    <a href="appointments.html" class="active">📅 Appointments</a>
+    <a href="prescriptions.html">📝 Prescriptions</a>
+    <a href="medications.html">💊 Order Medicines</a>
+    <a href="labtests.html">🩸 Book Blood Test</a>
+    <a href="reports.html">📤 My Reports</a>
+  </aside>
+
+  <main class="main-panel">
+    <div class="panel-head">
+      <h1>My appointments</h1>
+      <a href="find-doctors.html" class="btn btn-coral">+ Book new</a>
+    </div>
+    <div class="card list-card" id="apptList">
+      <div class="empty-state">Loading...</div>
+    </div>
+  </main>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth-guard.js"></script>
+<script>
+  requireAuth("patient");
+
+  async function load() {
+    const list = document.getElementById("apptList");
+    try {
+      const appointments = await Api.myAppointments();
+      if (!appointments.length) {
+        list.innerHTML = `<div class="empty-state">You have no appointments yet. <a href="find-doctors.html">Book one now</a>.</div>`;
+        return;
+      }
+      list.innerHTML = appointments
+        .map(
+          (a) => `
+        <div class="list-row">
+          <div class="who">
+            <div class="avatar">${initials(a.doctor?.user?.name)}</div>
+            <div>
+              <div class="meta-title">${a.doctor?.user?.name || "Doctor"} · ${a.doctor?.specialization || ""}</div>
+              <div class="meta-sub">${formatDate(a.date)} · ${a.timeSlot} · ${a.mode}${a.reason ? " · " + a.reason : ""}</div>
+            </div>
+          </div>
+          <div class="flex gap-8" style="flex-wrap:wrap; justify-content:flex-end;">
+            <span class="badge ${a.status}">${a.status}</span>
+            ${a.status === "confirmed" && a.mode === "video" ? `<a class="btn btn-sm btn-outline" href="video-call.html?appointmentId=${a._id}">Join call</a>` : ""}
+            ${a.status === "pending" || a.status === "confirmed" ? `<button class="btn btn-sm btn-danger" onclick="cancelAppt('${a._id}')">Cancel</button>` : ""}
+          </div>
+        </div>`
+        )
+        .join("");
+    } catch (err) {
+      list.innerHTML = `<div class="empty-state">${err.message}</div>`;
+    }
+  }
+
+  async function cancelAppt(id) {
+    if (!confirm("Cancel this appointment?")) return;
+    try {
+      await Api.cancelAppointment(id);
+      load();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>
