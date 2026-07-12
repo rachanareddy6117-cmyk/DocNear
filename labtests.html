@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Book Blood Test — Sehat Sathi</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html" class="brand"><span class="dot"></span> Sehat Sathi</a>
+  <nav></nav>
+  <div class="nav-actions" id="navUserSlot"></div>
+</div>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <a href="patient-dashboard.html">🏠 Overview</a>
+    <a href="find-doctors.html">🔎 Find Doctors</a>
+    <a href="appointments.html">📅 Appointments</a>
+    <a href="prescriptions.html">📝 Prescriptions</a>
+    <a href="medications.html">💊 Order Medicines</a>
+    <a href="labtests.html" class="active">🩸 Book Blood Test</a>
+    <a href="reports.html">📤 My Reports</a>
+  </aside>
+
+  <main class="main-panel">
+    <div class="panel-head"><h1>Book a lab / blood test</h1></div>
+
+    <div class="grid" style="grid-template-columns: 1fr 1fr; gap:24px; align-items:flex-start;">
+      <div class="card">
+        <div class="form-msg" id="testMsg"></div>
+        <form id="testForm">
+          <div class="field">
+            <label>Test name</label>
+            <input type="text" id="testName" required placeholder="e.g. Complete Blood Count">
+          </div>
+          <div class="field">
+            <label>Test type</label>
+            <select id="testType">
+              <option value="blood">Blood</option>
+              <option value="urine">Urine</option>
+              <option value="imaging">Imaging</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Preferred date</label>
+              <input type="date" id="preferredDate" required>
+            </div>
+            <div class="field">
+              <label>Preferred time</label>
+              <input type="text" id="preferredTimeSlot" placeholder="e.g. 8:00-9:00 AM">
+            </div>
+          </div>
+          <div class="field">
+            <label>Sample collection</label>
+            <select id="collectionType">
+              <option value="home">Home collection</option>
+              <option value="lab">Visit lab</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Address</label>
+            <textarea id="address" rows="2" placeholder="Home or lab address"></textarea>
+          </div>
+          <button class="btn btn-coral btn-block" type="submit">Book test</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>My booked tests</h3>
+        <div id="testList"><div class="empty-state">Loading...</div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth-guard.js"></script>
+<script>
+  requireAuth("patient");
+
+  document.getElementById("testForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = document.getElementById("testMsg");
+    try {
+      await Api.bookLabTest({
+        testName: document.getElementById("testName").value,
+        testType: document.getElementById("testType").value,
+        preferredDate: document.getElementById("preferredDate").value,
+        preferredTimeSlot: document.getElementById("preferredTimeSlot").value,
+        collectionType: document.getElementById("collectionType").value,
+        address: document.getElementById("address").value,
+      });
+      msg.textContent = "Test booked successfully!";
+      msg.className = "form-msg success";
+      document.getElementById("testForm").reset();
+      loadTests();
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.className = "form-msg error";
+    }
+  });
+
+  async function loadTests() {
+    const list = document.getElementById("testList");
+    try {
+      const tests = await Api.myLabTests();
+      if (!tests.length) {
+        list.innerHTML = `<div class="empty-state">No tests booked yet.</div>`;
+        return;
+      }
+      list.innerHTML = tests
+        .map(
+          (t) => `
+        <div class="list-row" style="padding:14px 0;">
+          <div>
+            <div class="meta-title">${t.testName}</div>
+            <div class="meta-sub">${formatDate(t.preferredDate)} · ${t.collectionType}</div>
+            ${t.resultFileUrl ? `<a href="http://localhost:5000${t.resultFileUrl}" target="_blank" class="text-small">View result</a>` : ""}
+          </div>
+          <span class="badge ${t.status}">${t.status}</span>
+        </div>`
+        )
+        .join("");
+    } catch (err) {
+      list.innerHTML = `<div class="empty-state">${err.message}</div>`;
+    }
+  }
+
+  loadTests();
+</script>
+</body>
+</html>

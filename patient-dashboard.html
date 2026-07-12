@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Dashboard — Sehat Sathi</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html" class="brand"><span class="dot"></span> Sehat Sathi</a>
+  <nav></nav>
+  <div class="nav-actions" id="navUserSlot"></div>
+</div>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <a href="patient-dashboard.html" class="active">🏠 Overview</a>
+    <a href="find-doctors.html">🔎 Find Doctors</a>
+    <a href="appointments.html">📅 Appointments</a>
+    <a href="prescriptions.html">📝 Prescriptions</a>
+    <a href="medications.html">💊 Order Medicines</a>
+    <a href="labtests.html">🩸 Book Blood Test</a>
+    <a href="reports.html">📤 My Reports</a>
+  </aside>
+
+  <main class="main-panel">
+    <div class="panel-head">
+      <h1>Welcome back, <span id="userName">there</span> 👋</h1>
+      <a href="find-doctors.html" class="btn btn-coral">+ Book appointment</a>
+    </div>
+
+    <div class="grid grid-4">
+      <div class="card stat-card"><div><div class="num" id="statAppointments">–</div><div class="label">Upcoming appointments</div></div></div>
+      <div class="card stat-card"><div><div class="num" id="statPrescriptions">–</div><div class="label">Active prescriptions</div></div></div>
+      <div class="card stat-card"><div><div class="num" id="statOrders">–</div><div class="label">Medicine orders</div></div></div>
+      <div class="card stat-card"><div><div class="num" id="statTests">–</div><div class="label">Lab tests booked</div></div></div>
+    </div>
+
+    <h3 class="mt-32">Upcoming appointments</h3>
+    <div class="card list-card" id="upcomingList">
+      <div class="empty-state">Loading...</div>
+    </div>
+  </main>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth-guard.js"></script>
+<script>
+  const user = requireAuth("patient");
+  if (user) document.getElementById("userName").textContent = user.name.split(" ")[0];
+
+  async function loadOverview() {
+    try {
+      const [appointments, prescriptions, orders, tests] = await Promise.all([
+        Api.myAppointments(),
+        Api.myPrescriptions(),
+        Api.myOrders(),
+        Api.myLabTests(),
+      ]);
+
+      const upcoming = appointments.filter((a) => a.status !== "cancelled" && a.status !== "completed");
+      document.getElementById("statAppointments").textContent = upcoming.length;
+      document.getElementById("statPrescriptions").textContent = prescriptions.length;
+      document.getElementById("statOrders").textContent = orders.length;
+      document.getElementById("statTests").textContent = tests.length;
+
+      const list = document.getElementById("upcomingList");
+      if (!upcoming.length) {
+        list.innerHTML = `<div class="empty-state">No upcoming appointments yet. <a href="find-doctors.html">Find a doctor</a> to get started.</div>`;
+        return;
+      }
+      list.innerHTML = upcoming
+        .slice(0, 5)
+        .map(
+          (a) => `
+        <div class="list-row">
+          <div class="who">
+            <div class="avatar">${initials(a.doctor?.user?.name)}</div>
+            <div>
+              <div class="meta-title">${a.doctor?.user?.name || "Doctor"}</div>
+              <div class="meta-sub">${formatDate(a.date)} · ${a.timeSlot} · ${a.mode}</div>
+            </div>
+          </div>
+          <span class="badge ${a.status}">${a.status}</span>
+        </div>`
+        )
+        .join("");
+    } catch (err) {
+      document.getElementById("upcomingList").innerHTML = `<div class="empty-state">${err.message}</div>`;
+    }
+  }
+
+  loadOverview();
+</script>
+</body>
+</html>

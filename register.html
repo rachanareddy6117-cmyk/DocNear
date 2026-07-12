@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create account — Sehat Sathi</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html" class="brand"><span class="dot"></span> Sehat Sathi</a>
+  <nav></nav>
+  <div class="nav-actions"><a href="login.html" class="btn btn-ghost btn-sm">Log in</a></div>
+</div>
+
+<div class="auth-wrap">
+  <div class="auth-card" style="max-width:480px;">
+    <h2>Create your account</h2>
+    <p class="auth-sub">Join as a patient to book care, or as a doctor to start consulting.</p>
+
+    <div class="form-msg" id="formMsg"></div>
+
+    <form id="registerForm">
+      <div class="role-toggle">
+        <label><input type="radio" name="role" value="patient" checked><span>🧑 I'm a Patient</span></label>
+        <label><input type="radio" name="role" value="doctor"><span>🩺 I'm a Doctor</span></label>
+      </div>
+
+      <div class="field">
+        <label for="name">Full name</label>
+        <input type="text" id="name" required placeholder="e.g. Rachana Reddy">
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="email">Email</label>
+          <input type="email" id="email" required placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label for="phone">Phone</label>
+          <input type="tel" id="phone" placeholder="9876543210">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <input type="password" id="password" required minlength="6" placeholder="At least 6 characters">
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="city">City</label>
+          <input type="text" id="city" placeholder="Hyderabad">
+        </div>
+        <div class="field">
+          <label for="age">Age</label>
+          <input type="number" id="age" min="0" placeholder="21">
+        </div>
+      </div>
+
+      <!-- Doctor-only fields -->
+      <div id="doctorFields" class="hidden">
+        <div class="field">
+          <label for="specialization">Specialization</label>
+          <input type="text" id="specialization" placeholder="e.g. Dermatologist">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="experienceYears">Experience (years)</label>
+            <input type="number" id="experienceYears" min="0" placeholder="5">
+          </div>
+          <div class="field">
+            <label for="consultationFee">Consultation fee (₹)</label>
+            <input type="number" id="consultationFee" min="0" placeholder="500">
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block mt-8" id="submitBtn">Create account</button>
+    </form>
+
+    <p class="text-center text-small mt-16">Already have an account? <a href="login.html">Log in</a></p>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth-guard.js"></script>
+<script>
+  const roleRadios = document.querySelectorAll('input[name="role"]');
+  const doctorFields = document.getElementById("doctorFields");
+  roleRadios.forEach((r) =>
+    r.addEventListener("change", () => {
+      doctorFields.classList.toggle("hidden", document.querySelector('input[name="role"]:checked').value !== "doctor");
+    })
+  );
+
+  const form = document.getElementById("registerForm");
+  const msg = document.getElementById("formMsg");
+  const btn = document.getElementById("submitBtn");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    msg.className = "form-msg";
+    btn.disabled = true;
+    btn.textContent = "Creating account...";
+
+    try {
+      const role = document.querySelector('input[name="role"]:checked').value;
+      const payload = {
+        name: document.getElementById("name").value.trim(),
+        email: document.getElementById("email").value.trim(),
+        phone: document.getElementById("phone").value.trim(),
+        password: document.getElementById("password").value,
+        city: document.getElementById("city").value.trim(),
+        age: document.getElementById("age").value || undefined,
+        role,
+      };
+
+      if (role === "doctor") {
+        payload.specialization = document.getElementById("specialization").value.trim();
+        payload.experienceYears = document.getElementById("experienceYears").value || 0;
+        payload.consultationFee = document.getElementById("consultationFee").value || 0;
+      }
+
+      const data = await Api.register(payload);
+      Api.setSession(data.token, data.user);
+      window.location.href = data.user.role === "doctor" ? "doctor-dashboard.html" : "patient-dashboard.html";
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.className = "form-msg error";
+      btn.disabled = false;
+      btn.textContent = "Create account";
+    }
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Order Medicines — Sehat Sathi</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html" class="brand"><span class="dot"></span> Sehat Sathi</a>
+  <nav></nav>
+  <div class="nav-actions" id="navUserSlot"></div>
+</div>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <a href="patient-dashboard.html">🏠 Overview</a>
+    <a href="find-doctors.html">🔎 Find Doctors</a>
+    <a href="appointments.html">📅 Appointments</a>
+    <a href="prescriptions.html">📝 Prescriptions</a>
+    <a href="medications.html" class="active">💊 Order Medicines</a>
+    <a href="labtests.html">🩸 Book Blood Test</a>
+    <a href="reports.html">📤 My Reports</a>
+  </aside>
+
+  <main class="main-panel">
+    <div class="panel-head"><h1>Order medicines</h1></div>
+
+    <div class="grid" style="grid-template-columns: 1.1fr 0.9fr; gap:24px; align-items:flex-start;">
+      <div class="card">
+        <h3>Add items</h3>
+        <div class="form-msg" id="orderMsg"></div>
+        <div id="itemRows"></div>
+        <button type="button" class="btn btn-ghost btn-sm mt-8" id="addItemBtn">+ Add another medicine</button>
+
+        <div class="field mt-24">
+          <label>Delivery address</label>
+          <textarea id="deliveryAddress" rows="2" placeholder="Where should we deliver this order?"></textarea>
+        </div>
+        <button class="btn btn-coral btn-block mt-8" id="placeOrderBtn">Place order</button>
+      </div>
+
+      <div class="card">
+        <h3>My orders</h3>
+        <div id="orderList"><div class="empty-state">Loading...</div></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth-guard.js"></script>
+<script>
+  requireAuth("patient");
+  const itemRows = document.getElementById("itemRows");
+
+  function addItemRow(name = "", qty = 1, price = "") {
+    const row = document.createElement("div");
+    row.className = "item-row";
+    row.style.display = "grid";
+    row.style.gridTemplateColumns = "2fr 0.7fr 0.9fr auto";
+    row.style.gap = "8px";
+    row.style.marginBottom = "10px";
+    row.innerHTML = `
+      <input type="text" placeholder="Medicine name" class="it-name" value="${name}">
+      <input type="number" placeholder="Qty" class="it-qty" min="1" value="${qty}">
+      <input type="number" placeholder="Price (₹)" class="it-price" min="0" value="${price}">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()">✕</button>
+    `;
+    row.querySelectorAll("input").forEach((inp) => {
+      inp.style.padding = "9px 10px";
+      inp.style.border = "1.5px solid var(--line)";
+      inp.style.borderRadius = "8px";
+      inp.style.background = "var(--sand-100)";
+    });
+    itemRows.appendChild(row);
+  }
+  addItemRow();
+  document.getElementById("addItemBtn").addEventListener("click", () => addItemRow());
+
+  document.getElementById("placeOrderBtn").addEventListener("click", async () => {
+    const msg = document.getElementById("orderMsg");
+    try {
+      const items = Array.from(document.querySelectorAll(".item-row"))
+        .map((row) => ({
+          medicineName: row.querySelector(".it-name").value,
+          quantity: parseInt(row.querySelector(".it-qty").value) || 1,
+          price: parseFloat(row.querySelector(".it-price").value) || 0,
+        }))
+        .filter((i) => i.medicineName);
+
+      const deliveryAddress = document.getElementById("deliveryAddress").value.trim();
+      if (!items.length) throw new Error("Add at least one medicine");
+      if (!deliveryAddress) throw new Error("Delivery address is required");
+
+      await Api.placeOrder({ items, deliveryAddress });
+      msg.textContent = "Order placed successfully!";
+      msg.className = "form-msg success";
+      loadOrders();
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.className = "form-msg error";
+    }
+  });
+
+  async function loadOrders() {
+    const list = document.getElementById("orderList");
+    try {
+      const orders = await Api.myOrders();
+      if (!orders.length) {
+        list.innerHTML = `<div class="empty-state">No orders yet.</div>`;
+        return;
+      }
+      list.innerHTML = orders
+        .map(
+          (o) => `
+        <div class="list-row" style="padding:14px 0;">
+          <div>
+            <div class="meta-title">₹${o.totalAmount} · ${o.items.length} item(s)</div>
+            <div class="meta-sub">${formatDate(o.createdAt)}</div>
+          </div>
+          <span class="badge ${o.status}">${o.status}</span>
+        </div>`
+        )
+        .join("");
+    } catch (err) {
+      list.innerHTML = `<div class="empty-state">${err.message}</div>`;
+    }
+  }
+
+  loadOrders();
+</script>
+</body>
+</html>

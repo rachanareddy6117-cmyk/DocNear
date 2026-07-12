@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Consultation — Sehat Sathi</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html" class="brand"><span class="dot"></span> Sehat Sathi</a>
+  <nav></nav>
+  <div class="nav-actions" id="navUserSlot"></div>
+</div>
+
+<div class="video-wrap">
+  <div class="panel-head">
+    <h1 id="callTitle">Video consultation</h1>
+    <a href="javascript:history.back()" class="btn btn-ghost">← Back</a>
+  </div>
+  <div class="form-msg" id="videoMsg"></div>
+  <div class="video-frame-holder">
+    <iframe id="videoFrame" allow="camera; microphone; fullscreen; display-capture; autoplay"></iframe>
+  </div>
+  <p class="text-small muted mt-16">Powered by Jitsi Meet — a free, open-source, encrypted video platform. No downloads needed.</p>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth-guard.js"></script>
+<script>
+  requireAuth();
+
+  const params = new URLSearchParams(window.location.search);
+  const appointmentId = params.get("appointmentId");
+  const msg = document.getElementById("videoMsg");
+
+  async function loadCall() {
+    if (!appointmentId) {
+      msg.textContent = "No appointment specified.";
+      msg.className = "form-msg error";
+      return;
+    }
+    try {
+      const room = await Api.getVideoRoom(appointmentId);
+      document.getElementById("callTitle").textContent = `Consultation: ${room.patientName || "Patient"} with Dr. ${room.doctorName || ""}`;
+      document.getElementById("videoFrame").src = room.callUrl;
+    } catch (err) {
+      msg.textContent = err.message;
+      msg.className = "form-msg error";
+    }
+  }
+
+  loadCall();
+</script>
+</body>
+</html>

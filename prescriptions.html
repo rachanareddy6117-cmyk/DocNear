@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>My Prescriptions — Sehat Sathi</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html" class="brand"><span class="dot"></span> Sehat Sathi</a>
+  <nav></nav>
+  <div class="nav-actions" id="navUserSlot"></div>
+</div>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <a href="patient-dashboard.html">🏠 Overview</a>
+    <a href="find-doctors.html">🔎 Find Doctors</a>
+    <a href="appointments.html">📅 Appointments</a>
+    <a href="prescriptions.html" class="active">📝 Prescriptions</a>
+    <a href="medications.html">💊 Order Medicines</a>
+    <a href="labtests.html">🩸 Book Blood Test</a>
+    <a href="reports.html">📤 My Reports</a>
+  </aside>
+
+  <main class="main-panel">
+    <div class="panel-head"><h1>My prescriptions</h1></div>
+    <div class="grid grid-2" id="rxList">
+      <div class="empty-state">Loading...</div>
+    </div>
+  </main>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth-guard.js"></script>
+<script>
+  requireAuth("patient");
+
+  async function load() {
+    const container = document.getElementById("rxList");
+    try {
+      const list = await Api.myPrescriptions();
+      if (!list.length) {
+        container.innerHTML = `<div class="empty-state">No prescriptions yet. They'll show up here after a doctor visit.</div>`;
+        return;
+      }
+      container.innerHTML = list
+        .map(
+          (rx) => `
+        <div class="card">
+          <div class="flex-between">
+            <div>
+              <div class="meta-title">Dr. ${rx.doctor?.user?.name || "Doctor"}</div>
+              <div class="meta-sub">${formatDate(rx.createdAt)}</div>
+            </div>
+          </div>
+          ${rx.diagnosis ? `<p class="mt-16"><strong>Diagnosis:</strong> ${rx.diagnosis}</p>` : ""}
+          ${
+            rx.medicines?.length
+              ? `<div class="mt-8">
+                  <strong>Medicines</strong>
+                  <ul style="margin:8px 0 0; padding-left:18px; color:var(--ink-soft); font-size:0.9rem;">
+                    ${rx.medicines.map((m) => `<li>${m.name} — ${m.dosage || ""} · ${m.frequency || ""} · ${m.duration || ""}</li>`).join("")}
+                  </ul>
+                </div>`
+              : ""
+          }
+          ${rx.advice ? `<p class="mt-16"><strong>Advice:</strong> ${rx.advice}</p>` : ""}
+          <a href="medications.html?rx=${rx._id}" class="btn btn-sm btn-outline mt-8">Order these medicines</a>
+        </div>`
+        )
+        .join("");
+    } catch (err) {
+      container.innerHTML = `<div class="empty-state">${err.message}</div>`;
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>

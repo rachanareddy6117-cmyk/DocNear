@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Doctor Dashboard — Sehat Sathi</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+  <a href="index.html" class="brand"><span class="dot"></span> Sehat Sathi</a>
+  <nav></nav>
+  <div class="nav-actions" id="navUserSlot"></div>
+</div>
+
+<div class="app-shell">
+  <aside class="sidebar">
+    <a href="doctor-dashboard.html" class="active">🏠 Overview</a>
+    <a href="reports.html">📤 Shared Reports</a>
+  </aside>
+
+  <main class="main-panel">
+    <div class="panel-head">
+      <h1>Welcome, Dr. <span id="userName"></span> 🩺</h1>
+    </div>
+
+    <div class="grid grid-4">
+      <div class="card stat-card"><div><div class="num" id="statPending">–</div><div class="label">Pending requests</div></div></div>
+      <div class="card stat-card"><div><div class="num" id="statConfirmed">–</div><div class="label">Confirmed appointments</div></div></div>
+      <div class="card stat-card"><div><div class="num" id="statCompleted">–</div><div class="label">Completed consultations</div></div></div>
+      <div class="card stat-card"><div><div class="num" id="statPatients">–</div><div class="label">Unique patients</div></div></div>
+    </div>
+
+    <h3 class="mt-32">Appointment requests & schedule</h3>
+    <div class="card list-card" id="apptList">
+      <div class="empty-state">Loading...</div>
+    </div>
+  </main>
+</div>
+
+<!-- Prescription modal -->
+<div id="rxOverlay" class="hidden" style="position:fixed; inset:0; background:rgba(13,59,58,0.45); z-index:100; display:flex; align-items:center; justify-content:center; padding:20px;">
+  <div class="card" style="max-width:520px; width:100%; background:white; max-height:88vh; overflow-y:auto;">
+    <h3>Write prescription</h3>
+    <div class="form-msg" id="rxMsg"></div>
+    <form id="rxForm">
+      <div class="field">
+        <label>Diagnosis</label>
+        <input type="text" id="rxDiagnosis" placeholder="e.g. Viral fever">
+      </div>
+      <div id="medicineRows"></div>
+      <button type="button" class="btn btn-ghost btn-sm mt-8" id="addMedicineBtn">+ Add medicine</button>
+      <div class="field mt-16">
+        <label>Advice</label>
+        <textarea id="rxAdvice" rows="2" placeholder="e.g. Rest, drink fluids, follow up in 5 days"></textarea>
+      </div>
+      <div class="flex gap-12 mt-8">
+        <button type="button" class="btn btn-ghost btn-block" id="cancelRxBtn">Cancel</button>
+        <button type="submit" class="btn btn-coral btn-block">Save prescription</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="js/api.js"></script>
+<script src="js/auth-guard.js"></script>
+<script>
+  const user = requireAuth("doctor");
+  if (user) document.getElementById("userName").textContent = user.name;
+
+  let currentAppointments = [];
+  let rxTargetAppointment = null;
+
+  async function loadOverview() {
+    try {
+      currentAppointments = await Api.myAppointments();
+
+      const pending = currentAppointments.filter((a) => a.status === "pending");
+      const confirmed = currentAppointments.filter((a) => a.status === "confirmed");
+      const completed = currentAppointments.filter((a) => a.status === "completed");
+      const uniquePatients = new Set(currentAppointments.map((a) => a.patient?._id)).size;
+
+      document.getElementById("statPending").textContent = pending.length;
+      document.getElementById("statConfirmed").textContent = confirmed.length;
+      document.getElementById("statCompleted").textContent = completed.length;
+      document.getElementById("statPatients").textContent = uniquePatients;
+
+      const list = document.getElementById("apptList");
+      if (!currentAppointments.length) {
+        list.innerHTML = `<div class="empty-state">No appointments yet. Patients will appear here once they book with you.</div>`;
+        return;
+      }
+
+      list.innerHTML = currentAppointments
+        .map(
+          (a) => `
+        <div class="list-row">
+          <div class="who">
+            <div class="avatar">${initials(a.patient?.name)}</div>
+            <div>
+              <div class="meta-title">${a.patient?.name || "Patient"}</div>
+              <div class="meta-sub">${formatDate(a.date)} · ${a.timeSlot} · ${a.mode} ${a.reason ? "· " + a.reason : ""}</div>
+            </div>
+          </div>
+          <div class="flex gap-8" style="flex-wrap:wrap; justify-content:flex-end;">
+            <span class="badge ${a.status}">${a.status}</span>
+            ${a.status === "pending" ? `<button class="btn btn-sm btn-primary" onclick="setStatus('${a._id}','confirmed')">Confirm</button>` : ""}
+            ${a.status === "confirmed" && a.mode === "video" ? `<a class="btn btn-sm btn-outline" href="video-call.html?appointmentId=${a._id}">Join call</a>` : ""}
+            ${a.status === "confirmed" ? `<button class="btn btn-sm btn-primary" onclick="openRx('${a._id}','${a.patient?._id}')">Prescribe</button>` : ""}
+            ${a.status === "confirmed" ? `<button class="btn btn-sm btn-ghost" onclick="setStatus('${a._id}','completed')">Mark done</button>` : ""}
+            ${a.status !== "completed" && a.status !== "cancelled" ? `<button class="btn btn-sm btn-danger" onclick="setStatus('${a._id}','cancelled')">Cancel</button>` : ""}
+          </div>
+        </div>`
+        )
+        .join("");
+    } catch (err) {
+      document.getElementById("apptList").innerHTML = `<div class="empty-state">${err.message}</div>`;
+    }
+  }
+
+  async function setStatus(id, status) {
+    try {
+      await Api.updateAppointmentStatus(id, { status });
+      loadOverview();
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  // ---- Prescription modal ----
+  const rxOverlay = document.getElementById("rxOverlay");
+  const medicineRows = document.getElementById("medicineRows");
+
+  function addMedicineRow() {
+    const row = document.createElement("div");
+    row.className = "field-row medicine-row";
+    row.style.marginBottom = "10px";
+    row.innerHTML = `
+      <input type="text" placeholder="Medicine name" class="rx-name">
+      <input type="text" placeholder="Dosage (e.g. 500mg)" class="rx-dosage">
+      <input type="text" placeholder="Frequency" class="rx-freq">
+      <input type="text" placeholder="Duration" class="rx-duration">
+    `;
+    row.style.display = "grid";
+    row.style.gridTemplateColumns = "1fr 1fr 1fr 1fr";
+    row.style.gap = "8px";
+    row.querySelectorAll("input").forEach((inp) => {
+      inp.style.padding = "9px 10px";
+      inp.style.border = "1.5px solid var(--line)";
+      inp.style.borderRadius = "8px";
+      inp.style.background = "var(--sand-100)";
+    });
+    medicineRows.appendChild(row);
+  }
+
+  document.getElementById("addMedicineBtn").addEventListener("click", addMedicineRow);
+
+  function openRx(appointmentId, patientId) {
+    rxTargetAppointment = { appointmentId, patientId };
+    document.getElementById("rxForm").reset();
+    medicineRows.innerHTML = "";
+    addMedicineRow();
+    document.getElementById("rxMsg").className = "form-msg";
+    rxOverlay.classList.remove("hidden");
+  }
+
+  document.getElementById("cancelRxBtn").addEventListener("click", () => rxOverlay.classList.add("hidden"));
+
+  document.getElementById("rxForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const rxMsg = document.getElementById("rxMsg");
+    try {
+      const medicines = Array.from(document.querySelectorAll(".medicine-row")).map((row) => ({
+        name: row.querySelector(".rx-name").value,
+        dosage: row.querySelector(".rx-dosage").value,
+        frequency: row.querySelector(".rx-freq").value,
+        duration: row.querySelector(".rx-duration").value,
+      })).filter(m => m.name);
+
+      await Api.writePrescription({
+        appointment: rxTargetAppointment.appointmentId,
+        patient: rxTargetAppointment.patientId,
+        diagnosis: document.getElementById("rxDiagnosis").value,
+        medicines,
+        advice: document.getElementById("rxAdvice").value,
+      });
+
+      rxOverlay.classList.add("hidden");
+      alert("Prescription saved. The patient can now view it in their account.");
+    } catch (err) {
+      rxMsg.textContent = err.message;
+      rxMsg.className = "form-msg error";
+    }
+  });
+
+  loadOverview();
+</script>
+</body>
+</html>
